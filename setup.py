@@ -5,11 +5,13 @@ from setuptools import setup, find_packages
 with open('README.md') as readme_file:
     readme = readme_file.read()
 
+with open('version') as version_file:
+    version = version_file.read()
 
 setup(
     name='pyarrowfs-adlgen2',
-    version='0.1.0',
-    description='Use arrow with Azure Data Lake gen2',
+    version=version,
+    description='Use pyarrow with Azure Data Lake gen2',
     url='https://github.com/kaaveland/pyarrowfs-adlgen2',
     author='Robin Kåveland',
     author_email='kaaveland@gmail.com',

@@ -4,6 +4,14 @@ Adapters to access Azure Data Lake gen2 storage through apache arrow
 These are fairly thin wrappers around the azure storage sdk:
 
 https://azuresdkdocs.blob.core.windows.net/$web/python/azure-storage-file-datalake/12.1.1/index.html
+
+Many options in the SDK are unused. For example:
+* No interaction with the lease (lock) system happens
+* No tags or metadata are set on any SDK objects
+* Only defaults are used for ACL/access levels (no public access for created file systems)
+
+Instead of trying to shoehorn functionality like the above into the pyarrow.PyFileSystem API, it is
+recommended to use the SDK separately to use this sort of functionality.
 """
 
 import os
@@ -22,7 +30,11 @@ def _parse_azure_ts(last_modified):
 
 
 class DatalakeGen2File(io.IOBase):
-    """Write and read files from Azure Data Lake gen2."""
+    """Write and read files from Azure Data Lake gen2.
+
+    Normally, you would not use this directly but get an instance from either
+    FilesystemHandler.open_* or AccountHandler.open_* methods.
+    """
 
     DEFAULT_BLOCK_SIZE = 5 * 2 ** 20
 
@@ -99,8 +111,22 @@ class DatalakeGen2File(io.IOBase):
 
 
 class FilesystemHandler(pyarrow.fs.FileSystemHandler):
+    """
+    Handler for a single file system within an azure storage account.
+
+    Use this if you do not have access to the account itself, f. ex. if you have a SAS token that
+    has access only to a single file system.
+    """
 
     def __init__(self, file_system_client: azure.storage.filedatalake.FileSystemClient, prefix_fs=False):
+        """
+        :param file_system_client:
+        :param prefix_fs: If True, prefix the name of the file system to all generated paths
+        :type file_system_client: azure.storage.filedatalake.FileSystemClient
+        :type prefix_fs: bool
+
+        https://azuresdkdocs.blob.core.windows.net/$web/python/azure-storage-file-datalake/12.1.1/azure.storage.filedatalake.html#azure.storage.filedatalake.FileSystemClient
+        """
         super().__init__()
         self.prefix_fs = prefix_fs
         self.file_system_client: azure.storage.filedatalake.FileSystemClient = file_system_client
@@ -115,6 +141,15 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
 
     @classmethod
     def from_account_name(cls, account_name, file_system_name, credential=None):
+        """
+        Create from storage account name, file system name and credential
+
+        :param account_name:
+        :param file_system_name:
+        :param credential: Any valid valid value to pass as credential to azure.storage.filedatalake.FileSystemClient
+        :type credential: str for SAS tokens, None for public access, any credential from azure.identity
+        :return: FilesystemHandler
+        """
         client = azure.storage.filedatalake.FileSystemClient(
             f'https://{account_name}.dfs.core.windows.net',
             file_system_name,
@@ -282,14 +317,31 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
         return pyarrow.fs.PyFileSystem(self)
 
 class AccountHandler(pyarrow.fs.FileSystemHandler):
+    """Handler for a single azure storage account.
+
+    Use this to to access an Azure Storage account with hierarchial namespace enabled.
+    """
 
     def __init__(self, datalake_service: azure.storage.filedatalake.DataLakeServiceClient):
+        """
+        :param datalake_service: data lake account service
+        :type datalake_service: azure.storage.filedatalake.DataLakeServiceClient
+
+        https://azuresdkdocs.blob.core.windows.net/$web/python/azure-storage-file-datalake/12.1.1/azure.storage.filedatalake.html#azure.storage.filedatalake.DataLakeServiceClient
+        """
         super().__init__()
         self.datalake_service = datalake_service
         self.file_system_handlers = {}
 
     @classmethod
     def from_account_name(cls, account_name, credential=None):
+        """
+        Create from storage account name and credential
+
+        :param account_name:
+        :param credential: Any valid valid value to pass as credential to azure.storage.filedatalake.FileSystemClient
+        :type credential: str for SAS tokens, None for public access, any credential from azure.identity
+        :return: FilesystemHandler"""
         datalake_service = azure.storage.filedatalake.DataLakeServiceClient(
             f'https://{account_name}.dfs.core.windows.net',
             credential

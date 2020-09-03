@@ -59,7 +59,7 @@ with fs.open_output_stream('container/out.parq') as out:
 Accessing only a single container/file-system
 --
 
-If you do not want, or can't access the whole storage account as a single filesystem, you can use `adlgen2fs.FileSystemHandler` to view a single file system within an account:
+If you do not want, or can't access the whole storage account as a single filesystem, you can use `pyarrowfs_adlgen2.FileSystemHandler` to view a single file system within an account:
 
 ```python
 import azure.identity
