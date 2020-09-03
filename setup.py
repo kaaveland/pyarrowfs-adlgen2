@@ -29,12 +29,11 @@ setup(
     packages=find_packages(include=['pyarrowfs_adlgen2'], exclude=['test']),
     python_requires='>=3.6',
     install_requires=[
-        'pyarrow>=1.0.1',
-        'azure-identity',
+        'pyarrow>=1.0.0',
         'azure-storage-file-datalake'
     ],
     extras_require={
         'dev': ['pandas', 'pytest']
     },
-    keywords='azure filesystem arrow parquet'
+    keywords='azure datalake filesystem pyarrow parquet'
 )

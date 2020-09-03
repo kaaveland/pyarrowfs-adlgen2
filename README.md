@@ -74,10 +74,10 @@ All access is done through the file system within the storage account.
 Running tests
 --
 
-To run the tests, you need:
+To run the integration tests, you need:
 
 - Azure Storage Account V2 with hierarchial namespace enabled (Data Lake gen2 account)
-- To configure azure login (f. ex. use `$ az login`)
+- To configure azure login (f. ex. use `$ az login` or set up environment variables, see ` azure.identity.DefaultAzureCredential`)
 - Install pytest, f. ex. `pip install pytest`
 
 **NB! All data in the storage account is deleted during testing, USE AN EMPTY ACCOUNT**
