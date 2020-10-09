@@ -5,6 +5,11 @@ pyarrowfs-adlgen2 is an implementation of a pyarrow filesystem for Azure Data La
 
 It allows you to use pyarrow and pandas to read parquet datasets directly from Azure without the need to copy files to local storage first.
 
+Installation
+--
+
+`pip install pyarrowfs-adlgen2`
+
 Reading datasets
 --
 
@@ -44,7 +49,7 @@ As of pyarrow version 1.0.1, `pyarrow.parquet.ParquetWriter` does not support `p
 
 ```python
 with fs.open_output_stream('container/out.parq') as out:
-    df.to_parquet(out) 
+    df.to_parquet(out)
 ```
 
 Or with arrow tables:
@@ -59,13 +64,13 @@ with fs.open_output_stream('container/out.parq') as out:
 Accessing only a single container/file-system
 --
 
-If you do not want, or can't access the whole storage account as a single filesystem, you can use `pyarrowfs_adlgen2.FileSystemHandler` to view a single file system within an account:
+If you do not want, or can't access the whole storage account as a single filesystem, you can use `pyarrowfs_adlgen2.FilesystemHandler` to view a single file system within an account:
 
 ```python
 import azure.identity
 import pyarrowfs_adlgen2
 
-handler = pyarrowfs_adlgen2.FileSystemHandler.from_account_name(
+handler = pyarrowfs_adlgen2.FilesystemHandler.from_account_name(
    "STORAGE_ACCOUNT", "FS_NAME", azure.identity.DefaultAzureCredential())
 ```
 
