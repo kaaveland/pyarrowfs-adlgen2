@@ -10,8 +10,8 @@ Many options in the SDK are unused. For example:
 * No tags or metadata are set on any SDK objects
 * Only defaults are used for ACL/access levels (no public access for created file systems)
 
-Instead of trying to shoehorn functionality like the above into the pyarrow.PyFileSystem API, it is
-recommended to use the SDK separately to use this sort of functionality.
+Instead of trying to shoehorn functionality like the above into the pyarrow.PyFileSystem API,
+it is recommended to use the SDK separately to use this sort of functionality.
 """
 
 import os
@@ -62,7 +62,11 @@ class DatalakeGen2File(io.IOBase):
             raise ValueError("Seek only available in read mode")
         if not 0 <= whence <= 2:
             raise ValueError(f'Invalid whence {whence}, should be 0, 1 or 2')
-        new_loc = [loc, self.loc + loc, self.file_client.get_file_properties().size + loc][whence]
+        new_loc = [
+            loc,
+            self.loc + loc,
+            self.file_client.get_file_properties().size + loc
+        ][whence]
         if new_loc < 0:
             raise ValueError("Seek before start of file")
         self.loc = new_loc
@@ -114,11 +118,15 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
     """
     Handler for a single file system within an azure storage account.
 
-    Use this if you do not have access to the account itself, f. ex. if you have a SAS token that
-    has access only to a single file system.
+    Use this if you do not have access to the account itself, f. ex. if you have a SAS token
+    that has access only to a single file system.
     """
 
-    def __init__(self, file_system_client: azure.storage.filedatalake.FileSystemClient, prefix_fs=False):
+    def __init__(
+            self,
+            file_system_client: azure.storage.filedatalake.FileSystemClient,
+            prefix_fs=False
+    ):
         """
         :param file_system_client:
         :param prefix_fs: If True, prefix the name of the file system to all generated paths
@@ -129,7 +137,7 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
         """
         super().__init__()
         self.prefix_fs = prefix_fs
-        self.file_system_client: azure.storage.filedatalake.FileSystemClient = file_system_client
+        self.file_system_client = file_system_client
 
     def _prefix(self, path):
         if self.prefix_fs and path:
@@ -146,8 +154,10 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
 
         :param account_name:
         :param file_system_name:
-        :param credential: Any valid valid value to pass as credential to azure.storage.filedatalake.FileSystemClient
-        :type credential: str for SAS tokens, None for public access, any credential from azure.identity
+        :param credential: Any valid valid value to pass as credential to
+            azure.storage.filedatalake.FileSystemClient
+        :type credential: str for SAS tokens, None for public access,
+            any credential from azure.identity
         :return: FilesystemHandler
         """
         client = azure.storage.filedatalake.FileSystemClient(
@@ -172,12 +182,19 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
         return f"abfs+{self.file_system_client.account_name}/{self.file_system_client.file_system_name}"
 
     def normalize_path(self, path: str):
-        return path
+        return path.lstrip('/').rstrip('/')
 
-    def _create_file_info(self, path_properties: azure.storage.filedatalake._models.PathProperties):
+    def _create_file_info(
+            self,
+            path_properties: azure.storage.filedatalake._models.PathProperties
+    ):
+        if path_properties.is_directory:
+            path_type = pyarrow.fs.FileType.Directory
+        else:
+            path_type = pyarrow.fs.FileType.File
         return pyarrow.fs.FileInfo(
             self._prefix(path_properties.name),
-            pyarrow.fs.FileType.Directory if path_properties.is_directory else pyarrow.fs.FileType.File,
+            path_type,
             size=path_properties.content_length,
             mtime=_parse_azure_ts(path_properties.last_modified)
         )
@@ -216,19 +233,22 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
 
     def get_file_info(self, paths: [str]):
         return [
-            self._get_file_info(path) for path in paths
+            self._get_file_info(self.normalize_path(path)) for path in paths
         ]
 
     def get_file_info_selector(self, selector: pyarrow.fs.FileSelector):
         try:
-            self._verify_is_dir(selector.base_dir)
+            self._verify_is_dir(self.normalize_path(selector.base_dir))
         except FileNotFoundError:
             if selector.allow_not_found:
                 return []
             else:
                 raise
 
-        listing = self.file_system_client.get_paths(selector.base_dir, recursive=selector.recursive)
+        listing = self.file_system_client.get_paths(
+            self.normalize_path(selector.base_dir),
+            recursive=selector.recursive
+        )
 
         return [
             self._create_file_info(path_properties)
@@ -236,6 +256,7 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
         ]
 
     def create_dir(self, path, recursive):
+        path = self.normalize_path(path)
         if recursive:
             self.file_system_client.create_directory(path)
         else:
@@ -244,10 +265,12 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
             self.file_system_client.create_directory(path)
 
     def delete_dir(self, path):
+        path = self.normalize_path(path)
         self._verify_is_dir(path)
         self.file_system_client.delete_directory(path)
 
     def delete_dir_contents(self, path, accept_root_dir=False):
+        path = self.normalize_path(path)
         self._verify_is_dir(path)
         if not accept_root_dir and path in {'', '/'}:
             raise ValueError('Attempt to delete root dir with accept_root_dir=False')
@@ -261,6 +284,7 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
         self.delete_dir_contents(path=None)
 
     def delete_file(self, path):
+        path = self.normalize_path(path)
         file_info: pyarrow.fs.FileInfo = self.get_file_info([path])[0]
         if not file_info.is_file:
             raise IsADirectoryError(self._prefix(path))
@@ -269,6 +293,8 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
     def move(self, src, dest):
         # This is a simple rename. Caveat: the dest path is not relative to the file_system,
         # the azure-sdk expects the file system to be prefixed to the new path.
+        src = self.normalize_path(src)
+        dest = self.normalize_path(dest)
         src_info = self.get_file_info([src])[0]
         if src_info.type == pyarrow.fs.FileType.Directory:
             dir_client = self.file_system_client.get_directory_client(src)
@@ -278,6 +304,8 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
             file_client.rename_file(new_name=file_client.file_system_name + '/' + dest)
 
     def copy_file(self, src, dest):
+        src = self.normalize_path(src)
+        dest = self.normalize_path(dest)
         try:
             info = self.get_file_info([dest])[0]
             if info.type == pyarrow.fs.FileType.Directory:
@@ -291,20 +319,24 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
                 out.write(source.read())
 
     def open_input_stream(self, path):
+        path = self.normalize_path(path)
         self._verify_is_file(path)
         fc = self.file_system_client.get_file_client(path)
         return pyarrow.PythonFile(DatalakeGen2File(fc, mode='rb'))
 
     def open_input_file(self, path):
+        path = self.normalize_path(path)
         self._verify_is_file(path)
         fc = self.file_system_client.get_file_client(path)
         return pyarrow.PythonFile(DatalakeGen2File(fc, mode='rb'))
 
     def open_output_stream(self, path):
+        path = self.normalize_path(path)
         fc = self.file_system_client.get_file_client(path)
         return pyarrow.PythonFile(DatalakeGen2File(fc, mode='wb'))
 
     def open_append_stream(self, path):
+        path = self.normalize_path(path)
         fc = self.file_system_client.get_file_client(path)
         return pyarrow.PythonFile(DatalakeGen2File(fc, mode='ab'))
 
@@ -339,8 +371,10 @@ class AccountHandler(pyarrow.fs.FileSystemHandler):
         Create from storage account name and credential
 
         :param account_name:
-        :param credential: Any valid valid value to pass as credential to azure.storage.filedatalake.FileSystemClient
-        :type credential: str for SAS tokens, None for public access, any credential from azure.identity
+        :param credential: Any valid valid value to pass as credential to
+            azure.storage.filedatalake.FileSystemClient
+        :type credential: str for SAS tokens, None for public access, any credential
+            from azure.identity
         :return: FilesystemHandler"""
         datalake_service = azure.storage.filedatalake.DataLakeServiceClient(
             f'https://{account_name}.dfs.core.windows.net',
@@ -363,11 +397,10 @@ class AccountHandler(pyarrow.fs.FileSystemHandler):
         return f'abfs+{self.datalake_service.account_name}'
 
     def normalize_path(self, path):
-        return path
+        return path.lstrip('/').rstrip('/')
 
-    @staticmethod
-    def _split_path(path):
-        path = path.lstrip('/')
+    def _split_path(self, path):
+        path = self.normalize_path(path)
         if '/' not in path:
             return path, ''
         fs_name, *rest = path.split('/')
@@ -380,7 +413,10 @@ class AccountHandler(pyarrow.fs.FileSystemHandler):
         if fs_name in self.file_system_handlers:
             return self.file_system_handlers[fs_name]
         else:
-            new_fs_handler = FilesystemHandler(self.datalake_service.get_file_system_client(fs_name), prefix_fs=True)
+            new_fs_handler = FilesystemHandler(
+                self.datalake_service.get_file_system_client(fs_name),
+                prefix_fs=True
+            )
             return self.file_system_handlers.setdefault(fs_name, new_fs_handler)
 
     def _get_file_info(self, path):
@@ -422,7 +458,7 @@ class AccountHandler(pyarrow.fs.FileSystemHandler):
             except azure.core.exceptions.ResourceExistsError:
                 pass
         if path:
-            if not fs_name in [fs.name for fs in self.datalake_service.list_file_systems()]:
+            if fs_name not in [fs.name for fs in self.datalake_service.list_file_systems()]:
                 raise FileNotFoundError(fs_name)
             self._fs(fs_name).create_dir(path, recursive)
 
@@ -480,13 +516,15 @@ class AccountHandler(pyarrow.fs.FileSystemHandler):
                     raise ValueError(f'{dest} is non-empty directory')
             if fi.type != dest_fi.type:
                 raise ValueError(f'src {src} is {fi.type}, but dest {dest} is {dest_fi.type}')
-        except FileNotFoundError as dest_doesnt_exist:
+        except FileNotFoundError:
             pass
 
         if fi.is_file:
             self._fs(src_fs).file_system_client.get_file_client(src_path).rename_file(dest)
         else:
-            self._fs(src_fs).file_system_client.get_directory_client(src_path).rename_directory(dest)
+            self._fs(
+                src_fs
+            ).file_system_client.get_directory_client(src_path).rename_directory(dest)
 
     def copy_file(self, src, dest):
         try:
@@ -526,4 +564,3 @@ class AccountHandler(pyarrow.fs.FileSystemHandler):
 
     def to_fs(self):
         return pyarrow.fs.PyFileSystem(self)
-

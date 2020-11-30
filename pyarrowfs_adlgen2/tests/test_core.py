@@ -179,3 +179,38 @@ class TestAccountHandler:
         ds = pyarrow.dataset.dataset('bigfile/bigfile.parq', filesystem=account_handler.to_fs())
         df2 = ds.to_table().to_pandas(self_destruct=True)
         assert (df == df2).all().all()
+
+    def test_leading_trailing_slash(self, account_handler):
+        account_handler.create_dir('leadingslash/subfolder/ds', recursive=True)
+        df = pd.DataFrame(np.random.normal(size=(10, 5)))
+        table = pyarrow.Table.from_pandas(df=df)
+        with account_handler.open_output_stream('leadingslash/subfolder/ds/part.parq') as out:
+            pyarrow.parquet.write_table(table, out)
+
+        pd.read_parquet(
+            '/leadingslash/subfolder/ds/part.parq/',
+            filesystem=account_handler.to_fs()
+        )
+
+    def test_partitioned_parquet(self, account_handler):
+        account_handler.create_dir('partitioned/ds', recursive=True)
+        fs = account_handler.to_fs()
+
+        table_left = pyarrow.Table.from_pandas(
+            pd.DataFrame({'i': list(range(10))}).assign(dir='left')
+        )
+        table_right = pyarrow.Table.from_pandas(
+            pd.DataFrame({'i': list(range(10, 20))}).assign(dir='right')
+        )
+
+        with account_handler.open_output_stream('partitioned/ds/dir=left') as out:
+            pyarrow.parquet.write_table(table_left, out)
+        with account_handler.open_output_stream('partitioned/ds/dir=right') as out:
+            pyarrow.parquet.write_table(table_right, out)
+
+        ds = pyarrow.dataset.dataset('partitioned/ds', filesystem=fs, partitioning='hive')
+        table_left = ds.to_table(filter=pyarrow.dataset.field('dir') == 'left').to_pandas()
+        table_right = ds.to_table(filter=pyarrow.dataset.field('dir') == 'right').to_pandas()
+
+        assert table_left.i.max() == 9
+        assert table_right.i.max() == 19
