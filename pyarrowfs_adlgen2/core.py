@@ -25,8 +25,11 @@ import pyarrow.fs
 
 def _parse_azure_ts(last_modified):
     # Mon, 17 Aug 2020 12:19:35 GMT
-    fmt = "%a, %d %b %Y %H:%M:%S %Z"
-    return datetime.datetime.strptime(last_modified, fmt)
+    if isinstance(last_modified, str):
+        fmt = "%a, %d %b %Y %H:%M:%S %Z"
+        return datetime.datetime.strptime(last_modified, fmt)
+    else:
+        return last_modified
 
 
 class DatalakeGen2File(io.IOBase):
