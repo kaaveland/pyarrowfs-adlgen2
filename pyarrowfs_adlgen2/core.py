@@ -86,6 +86,10 @@ class DatalakeGen2File(io.IOBase):
             self.flush()
         return out
 
+    def writeable(self):
+        return self.mode in {'wb', 'ab'}
+
+
     def flush(self):
         if self.closed:
             raise ValueError("Flush on closed file")
@@ -350,6 +354,7 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
 
     def to_fs(self):
         return pyarrow.fs.PyFileSystem(self)
+
 
 class AccountHandler(pyarrow.fs.FileSystemHandler):
     """Handler for a single azure storage account.
