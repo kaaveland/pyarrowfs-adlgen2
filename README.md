@@ -42,8 +42,43 @@ ds = pyarrow.dataset.dataset('container/dataset.parq', filesystem=fs)
 table = ds.to_table()
 ```
 
+Configuring timeouts
+--
+
+Timeouts are passed to azure-storage-file-datalake SDK methods. The timeout unit is in seconds.
+
+```python
+import azure.identity
+import pyarrowfs_adlgen2
+
+handler = pyarrowfs_adlgen2.AccountHandler.from_account_name(
+    'YOUR_ACCOUNT_NAME',
+    azure.identity.DefaultAzureCredential(),
+    timeouts=pyarrowfs_adlgen2.Timeouts(file_system_timeout=10)
+)
+# or mutate it:
+handler.timeouts.file_client_timeout = 20
+```
+
 Writing datasets
 --
+
+With pyarrow version 3 or greater, you can write datasets from arrow tables:
+
+```python
+import pyarrow as pa
+import pyarrow.dataset
+
+pyarrow.dataset.write_dataset(
+    table,
+    'name.pq',
+    format='parquet',
+    partitioning=[('year', pa.int32())],
+    filesystem=pyarrow.fs.PyFileSystem(handler)
+)
+```
+
+With earlier versions, files must be opened/written one at a time:
 
 As of pyarrow version 1.0.1, `pyarrow.parquet.ParquetWriter` does not support `pyarrow.fs.PyFileSystem`, but data can be written to open files:
 

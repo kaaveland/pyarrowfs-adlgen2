@@ -1,6 +1,7 @@
-from .core import FilesystemHandler, AccountHandler
+from .core import FilesystemHandler, AccountHandler, Timeouts
 
 __all__ = [
     FilesystemHandler,
-    AccountHandler
+    AccountHandler,
+    Timeouts
 ]
