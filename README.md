@@ -42,6 +42,24 @@ ds = pyarrow.dataset.dataset('container/dataset.parq', filesystem=fs)
 table = ds.to_table()
 ```
 
+Configuring timeouts
+--
+
+Timeouts are passed to azure-storage-file-datalake SDK methods. The timeout unit is in seconds.
+
+```python
+import azure.identity
+import pyarrowfs_adlgen2
+
+handler = pyarrowfs_adlgen2.AccountHandler.from_account_name(
+    'YOUR_ACCOUNT_NAME',
+    azure.identity.DefaultAzureCredential(),
+    timeouts=pyarrowfs_adlgen2.Timeouts(file_system_timeout=10)
+)
+# or mutate it:
+handler.timeouts.file_client_timeout = 20
+```
+
 Writing datasets
 --
 
