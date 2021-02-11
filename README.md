@@ -73,7 +73,9 @@ pyarrow.dataset.write_dataset(
     table,
     'name.pq',
     format='parquet',
-    partitioning=[('year', pa.int32())],
+    partitioning=pyarrow.dataset.partitioning(
+        schema=pyarrow.schema([('year', pa.int32())]), flavor='hive'
+    ),
     filesystem=pyarrow.fs.PyFileSystem(handler)
 )
 ```
