@@ -316,7 +316,7 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
             file_system_name,
             credential=credential
         )
-        return cls(client, timeouts)
+        return cls(client, timeouts=timeouts)
 
     def __eq__(self, other):
         if isinstance(other, FilesystemHandler):
