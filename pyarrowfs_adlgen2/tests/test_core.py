@@ -12,15 +12,18 @@ import pytest
 
 from .. import core
 
+
 @pytest.fixture(scope='module')
 def credential():
     return azure.identity.DefaultAzureCredential()
+
 
 @pytest.fixture(scope='module')
 def account_name():
     # NB NB: ALL CONTENT IS DELETED AS PART OF TEST RUNNING
     # USE A DEDICATED TESTING ACCOUNT
     return os.environ['AZUREARROWFS_TEST_ACT']
+
 
 @pytest.fixture(scope='module')
 def datalake_service_account(account_name, credential):
@@ -29,9 +32,11 @@ def datalake_service_account(account_name, credential):
         credential
     )
 
+
 @pytest.fixture(scope='module')
 def _account_handler(datalake_service_account):
     return core.AccountHandler(datalake_service_account)
+
 
 @pytest.fixture(scope='module')
 def account_handler(_account_handler):
@@ -39,11 +44,32 @@ def account_handler(_account_handler):
     for fs in _account_handler.datalake_service.list_file_systems():
         _account_handler.datalake_service.delete_file_system(fs)
 
+
 @pytest.fixture(scope='module')
 def fs_handler(datalake_service_account):
     if 'testfs' not in [fs.name for fs in datalake_service_account.list_file_systems()]:
         datalake_service_account.create_file_system('testfs')
     return core.FilesystemHandler(datalake_service_account.get_file_system_client('testfs'))
+
+
+def test_fs_handler_from_account_name_does_not_prefix(account_name, credential):
+    handler = core.FilesystemHandler.from_account_name(
+        account_name, 'testfs', credential
+    )
+    assert not handler.prefix_fs
+
+
+class TestFilesystemHandler:
+
+    def test_list_unknown_directory(self, fs_handler):
+        selector = pyarrow.fs.FileSelector('no-such-directory', recursive=True)
+        with pytest.raises(NotADirectoryError):
+            fs_handler.get_file_info_selector(selector)
+
+    def test_list_unknown_file(self, fs_handler):
+        with pytest.raises(FileNotFoundError):
+            fs_handler.get_file_info(['no-such-file'])
+
 
 class TestAccountHandler:
 
@@ -56,7 +82,8 @@ class TestAccountHandler:
         assert listing.path == ''
         assert listing.type == pyarrow.fs.FileType.Directory
         listing = account_handler.get_file_info_selector(pyarrow.fs.FileSelector('', recursive=False))
-        assert listing == []
+        paths = [fi.path for fi in listing if fi.path != 'testfs']
+        assert paths == []
 
     def test_create_dir_simple(self, account_handler: core.AccountHandler):
         account_handler.create_dir('testfs', False)
