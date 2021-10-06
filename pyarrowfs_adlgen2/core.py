@@ -367,7 +367,7 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
                         raise NotADirectoryError(self._prefix(path))
                     return
             raise NotADirectoryError(self._prefix(path))
-        except azure.storage.filedatalake._models.StorageErrorException as e:
+        except azure.core.exceptions.HttpResponseError as e:
             if e.status_code == 404:
                 raise FileNotFoundError(self._prefix(path))
             else:
