@@ -113,6 +113,27 @@ handler = pyarrowfs_adlgen2.FilesystemHandler.from_account_name(
 
 All access is done through the file system within the storage account.
 
+Set http headers for files for pyarrow >= 5
+--
+
+You can set headers for any output files by using the `metadata` argument to `handler.open_output_stream`:
+
+```python
+import pyarrowfs_adlgen2
+
+fs = pyarrowfs_adlgen2.AccountHandler.from_account_name("theaccount").to_fs()
+metadata = {"content_type": "application/json"}
+with fs.open_output_stream("container/data.json", metadata) as out:
+    out.write("{}")
+```
+
+Note that the spelling is different than you might expect! For a list of valid keys, see
+[ContentSettings](https://docs.microsoft.com/en-us/python/api/azure-storage-file-datalake/azure.storage.filedatalake.contentsettings?view=azure-python).
+
+You can do this for pyarrow >= 5 when using `pyarrow.fs.PyFileSystem`, and for any pyarrow if using the handlers
+from pyarrowfs_adlgen2 directly.
+
+
 Running tests
 --
 
