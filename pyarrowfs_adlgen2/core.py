@@ -22,6 +22,7 @@ import dataclasses
 
 import azure.core.exceptions
 import azure.storage.filedatalake
+from azure.storage.filedatalake import ContentSettings
 import pyarrow.fs
 
 
@@ -435,8 +436,8 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
             else:
                 self.delete_file_(path_properties.name)
 
-    def delete_root_dir_contents(self, path):
-        self.delete_dir_contents(path=None)
+    def delete_root_dir_contents(self):
+        self.delete_dir_contents("")
 
     def delete_file(self, path):
         path = self.normalize_path(path)
@@ -483,14 +484,54 @@ class FilesystemHandler(pyarrow.fs.FileSystemHandler):
         fc = self.file_system_client.get_file_client(path)
         return pyarrow.PythonFile(DatalakeGen2File(fc, mode='rb', timeouts=self.timeouts))
 
-    def open_output_stream(self, path):
+    def _set_metadata(self, fc, metadata):
+        if metadata:
+            # pyarrow sends bytes, which we can't splat into the init of ContentSettings due to TypeError
+            # a simple workaround would be to just type the keys manually, do a lookup -- but if we did,
+            # we would need to update this location if the SDK were to ever add anything (which they might never).
+            # However, these are HTTP header names in our case, so we let's hope they don't contain any characters that
+            # wouldn't decode to something meaningful with the default encoding
+            metadata = {str(key): metadata[key] for key in metadata}
+            settings = ContentSettings(**metadata)
+            if fc.exists():
+                fc.set_http_headers(settings)
+            else:
+                fc.create_file(content_settings=settings)
+
+
+    def open_output_stream(self, path, metadata=None):
+        """Return an open output stream
+
+        Overwrite contents at `path`, if there are any.
+
+        Metadata if provided must use keys acceptable to
+        azure.storage.filedatalake.ContentSettings,
+        for example: content_type, content_encoding, cache_control
+
+        :param path: `str`
+        :param metadata: `dict`
+        """
+
         path = self.normalize_path(path)
         fc = self.file_system_client.get_file_client(path)
+        self._set_metadata(fc, metadata)
         return pyarrow.PythonFile(DatalakeGen2File(fc, mode='wb', timeouts=self.timeouts))
 
-    def open_append_stream(self, path):
+    def open_append_stream(self, path, metadata=None):
+        """Return an open output stream
+
+        Append to contents at `path`, if there are any.
+
+        Metadata if provided must use keys acceptable to
+        azure.storage.filedatalake.ContentSettings,
+        for example: content_type, content_encoding, cache_control
+
+        :param path: `str`
+        :param metadata: `dict`
+        """
         path = self.normalize_path(path)
         fc = self.file_system_client.get_file_client(path)
+        self._set_metadata(fc, metadata)
         return pyarrow.PythonFile(DatalakeGen2File(fc, mode='ab', timeouts=self.timeouts))
 
     def _verify_is_file(self, path):
@@ -553,7 +594,7 @@ class AccountHandler(pyarrow.fs.FileSystemHandler):
             f'https://{account_name}.dfs.core.windows.net',
             credential
         )
-        return cls(datalake_service, timeouts)
+        return cls(datalake_service, timeouts, fs_handler_cls=fs_handler_cls)
 
     def __eq__(self, other):
         if isinstance(other, AccountHandler):
@@ -683,7 +724,7 @@ class AccountHandler(pyarrow.fs.FileSystemHandler):
             # In _our_ context, root dir can not be within the child file system
             self._fs(fs_name).delete_dir_contents(path, accept_root_dir=True)
 
-    def delete_root_dir_contents(self, path):
+    def delete_root_dir_contents(self):
         self.delete_dir_contents("")
 
     def delete_file(self, path):
@@ -752,15 +793,38 @@ class AccountHandler(pyarrow.fs.FileSystemHandler):
         self._require_path(path)
         return self._fs(fs_name).open_input_file(path)
 
-    def open_output_stream(self, path):
-        fs_name, path = self._split_path(path)
-        self._require_path(path)
-        return self._fs(fs_name).open_output_stream(path)
+    def open_output_stream(self, path, metadata=None):
+        """Return an open output stream
 
-    def open_append_stream(self, path):
+        Overwrite contents at `path`, if there are any.
+
+        Metadata if provided must use keys acceptable to
+        azure.storage.filedatalake.ContentSettings,
+        for example: content_type, content_encoding, cache_control
+
+        :param path: `str`
+        :param metadata: `dict`
+        """
         fs_name, path = self._split_path(path)
         self._require_path(path)
-        return self._fs(fs_name).open_append_stream(path)
+        return self._fs(fs_name).open_output_stream(path, metadata=metadata)
+
+    def open_append_stream(self, path, metadata=None):
+        """Return an open output stream
+
+        Append to contents at `path`, if there are any.
+
+        Metadata if provided must use keys acceptable to
+        azure.storage.filedatalake.ContentSettings,
+        for example: content_type, content_encoding, cache_control
+
+        :param path: `str`
+        :param metadata: `dict`
+        """
+
+        fs_name, path = self._split_path(path)
+        self._require_path(path)
+        return self._fs(fs_name).open_append_stream(path, metadata=metadata)
 
     def to_fs(self):
         return pyarrow.fs.PyFileSystem(self)

@@ -246,3 +246,9 @@ class TestAccountHandler:
         account_handler.create_dir('patest', recursive=False)
         with account_handler.to_fs().open_output_stream('patest/t.pq') as o:
             o.write(b'anything')
+
+    def test_open_with_metadata(self, account_handler):
+        account_handler.create_dir('patest', recursive=False)
+        md = {'content_type': 'application/octet-stream'}
+        with account_handler.to_fs().open_output_stream('patest/t.pq', metadata=md) as o:
+            o.write(b'anything')
