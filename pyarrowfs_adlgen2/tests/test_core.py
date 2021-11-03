@@ -241,3 +241,8 @@ class TestAccountHandler:
 
         assert table_left.i.max() == 9
         assert table_right.i.max() == 19
+
+    def test_open_output_stream_with_arrow_fs(self, account_handler):
+        account_handler.create_dir('patest', recursive=False)
+        with account_handler.to_fs().open_output_stream('patest/t.pq') as o:
+            o.write(b'anything')
