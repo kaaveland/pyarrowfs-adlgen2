@@ -122,7 +122,6 @@ class DatalakeGen2File(io.IOBase):
         azure.storage.filedatalake.DataLakeFileClient.append_data,
         "file_client_timeout")
     def append_data(self, data, offset, length):
-
         # timeout is undocumented here, but is still being used in the sdk code
         return self.file_client.append_data(
             data, offset, length, timeout=self.timeouts.file_client_timeout
@@ -132,7 +131,6 @@ class DatalakeGen2File(io.IOBase):
         azure.storage.filedatalake.DataLakeFileClient.flush_data,
         "file_client_timeout")
     def flush_data(self, offset):
-
         # timeout is undocumented here, but is still being used in the sdk code
         return self.file_client.flush_data(
             offset, timeout=self.timeouts.file_client_timeout
@@ -142,7 +140,6 @@ class DatalakeGen2File(io.IOBase):
         azure.storage.filedatalake.DataLakeFileClient.download_file,
         "file_client_timeout")
     def download_file(self, loc, length):
-
         return self.file_client.download_file(
             loc, length, timeout=self.timeouts.file_client_timeout
         )
@@ -191,8 +188,10 @@ class DatalakeGen2File(io.IOBase):
             else:
                 self.offset = 0
 
-        self.append_data(self.buffer.getvalue(), self.offset, self.buffer.tell())
-        self.offset += self.buffer.tell()
+        data, length = self.buffer.getvalue(), self.buffer.tell()
+        if length > 0:
+            self.append_data(data, self.offset, length)
+        self.offset += length
         self.flush_data(self.offset)
         self.buffer = io.BytesIO()
 
