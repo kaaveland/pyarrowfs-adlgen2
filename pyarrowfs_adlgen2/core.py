@@ -692,17 +692,24 @@ class AccountHandler(pyarrow.fs.FileSystemHandler):
     def create_dir(self, path, recursive):
         fs_name, path = self._split_path(path)
 
+        # This `create_dir` requires us to create a container if it does not exist
         if recursive or not path:
             try:
-                fs_client = self.create_file_system(fs_name)
-                self.file_system_handlers[fs_name] = self.fs_handler_cls(
-                    fs_client, prefix_fs=True, timeouts=self.timeouts)
+                self.create_file_system(fs_name)
             except azure.core.exceptions.ResourceExistsError:
                 pass
+            except azure.core.exceptions.HttpResponseError as e:
+                if 'AuthorizationFailure' in e.message:
+                    # We don't have permission to create the file system, but it might still exist.
+                    pass
+                else:
+                    raise FileNotFoundError(fs_name) from e
+
         if path:
-            if fs_name not in [fs.name for fs in self.list_file_systems()]:
-                raise FileNotFoundError(fs_name)
-            self._fs(fs_name).create_dir(path, recursive)
+            try:
+                self._fs(fs_name).create_dir(path, recursive)
+            except azure.core.exceptions.ResourceNotFoundError as e:
+                raise FileNotFoundError(fs_name, path) from e
 
     def delete_dir(self, path):
         fs_name, path = self._split_path(path)

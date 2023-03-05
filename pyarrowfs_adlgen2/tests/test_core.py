@@ -1,3 +1,4 @@
+import datetime
 import os
 
 import azure.identity
@@ -50,6 +51,29 @@ def fs_handler(datalake_service_account):
     if 'testfs' not in [fs.name for fs in datalake_service_account.list_file_systems()]:
         datalake_service_account.create_file_system('testfs')
     return core.FilesystemHandler(datalake_service_account.get_file_system_client('testfs'))
+
+
+@pytest.fixture(scope='module')
+def limited_access_sas_token(datalake_service_account: azure.storage.filedatalake.DataLakeServiceClient, credential):
+    file_sys = datalake_service_account.create_file_system('sastokenfs')
+    now = datetime.datetime.now()
+    valid_from = now - datetime.timedelta(hours=2)
+    valid_to = now + datetime.timedelta(minutes=10)
+    user_key = datalake_service_account.get_user_delegation_key(
+        valid_from, valid_to
+    )
+    return azure.storage.filedatalake.generate_file_system_sas(
+        datalake_service_account.account_name, file_sys.file_system_name, user_key,
+        azure.storage.filedatalake.FileSystemSasPermissions(
+            read=True, write=True, delete=True, list=True, move=True, execute=True, manage_ownership=False, manage_access_control=False
+        ),
+        expiry=valid_to,
+    )
+
+
+@pytest.fixture(scope='module')
+def limited_access_account_handler(limited_access_sas_token, account_name):
+    return core.AccountHandler.from_account_name(account_name, credential=limited_access_sas_token)
 
 
 def test_fs_handler_from_account_name_does_not_prefix(account_name, credential):
@@ -252,3 +276,13 @@ class TestAccountHandler:
         md = {'content_type': 'application/octet-stream'}
         with account_handler.to_fs().open_output_stream('patest/t.pq', metadata=md) as o:
             o.write(b'anything')
+
+
+class TestLimitedAccessAccountHandler:
+
+    def test_write_parquet_dataset_with_limited_access(self, limited_access_account_handler):
+        fs = limited_access_account_handler.to_fs()
+        df = pd.DataFrame([
+            {"side": "left", "data": 2}, {"side": "right", "data": 3}
+        ])
+        df.to_parquet('sastokenfs/data.pq', partition_cols=['side'], filesystem=fs)
