@@ -3,7 +3,12 @@ pyarrowfs-adlgen2
 
 pyarrowfs-adlgen2 is an implementation of a pyarrow filesystem for Azure Data Lake Gen2.
 
-It allows you to use pyarrow and pandas to read parquet datasets directly from Azure without the need to copy files to local storage first.
+It allows you to use pyarrow and pandas to read parquet datasets directly from Azure without
+the need to copy files to local storage first.
+
+Compared with [adlfs](https://github.com/fsspec/adlfs/), you may see better performance when reading datasets 
+with many files, as pyarrowfs-adlgen2 uses the  datalake gen2 sdk, which has fast directory listing, unlike
+the blob sdk used by adlfs.
 
 Installation
 --
@@ -148,3 +153,66 @@ To run the integration tests, you need:
 ```
 AZUREARROWFS_TEST_ACT=thestorageaccount pytest
 ```
+
+Performance
+==
+
+Here is an informal comparison test against adlfs, done against a copy of the 
+[NYC taxi dataset](https://learn.microsoft.com/en-us/azure/open-datasets/dataset-taxi-yellow).
+
+The test setup was as follows:
+
+1. Create an Azure Data Lake Gen2 storage account with a container. I clicked through the portal to do this step. Grant
+   yourself the Azure Storage Data Owner role on the account.
+2. Upload the NYC taxi dataset to the container. You want to do this with `azcopy` or `az cli`, or it's going to take a 
+   long time. Here's the command I used, it only took a few seconds:
+   `az storage copy -s https://azureopendatastorage.blob.core.windows.net/nyctlc/yellow --recursive -d https://benchpyarrowfs.blob.core.windows.net/taxi/`
+3. Set up a venv for the test, and install the dependencies: 
+   `python -m venv && source venv/bin/activate && pip install pyarrowfs-adlgen2 pandas pyarrow adlfs azure-identity`
+4. Make sure to log in with `az login` and set the correct subscription using `az account set -s playground-sub`
+
+That's the entire test setup. Now we can run some commands against the dataset and time them. Let's see
+how long it takes to read the `passengerCount` and `tripDistance` columns for one month of data, 2014/10 using
+`pyarrowfs-adlgen2` and the `pyarrow` dataset api:
+
+```shell 
+$ time python adlg2_taxi.py 
+<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 14227692 entries, 0 to 14227691
+Data columns (total 2 columns):
+ #   Column          Dtype  
+---  ------          -----  
+ 0   passengerCount  int32  
+ 1   tripDistance    float64
+dtypes: float64(1), int32(1)
+memory usage: 162.8 MB
+
+real	0m11,000s
+user	0m2,018s
+sys	0m1,605s
+```
+
+Now let's do the same with `adlfs`:
+
+```shell
+$ time python adlfs_taxi.py 
+<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 14227692 entries, 0 to 14227691
+Data columns (total 2 columns):
+ #   Column          Dtype  
+---  ------          -----  
+ 0   passengerCount  int32  
+ 1   tripDistance    float64
+dtypes: float64(1), int32(1)
+memory usage: 162.8 MB
+
+real	0m31,985s
+user	0m3,204s
+sys	0m2,110s
+```
+
+The `pyarrowfs-adlgen2` implementation is about 3 times faster than `adlfs` for this dataset and that's not due to
+bandwidth or compute limitations. This reflects my own experience using both professionally as well. I believe that
+the difference here is primarily due to the fact that `adlfs` uses the blob storage SDK, which is slow at listing
+directories, and that the nyc taxi data set has a lot of files and structure. adlfs is being forced to parse that
+to recover the structure, whereas adlgen2 gets it for free from the datalake gen2 SDK.
