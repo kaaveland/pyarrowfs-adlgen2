@@ -1,6 +1,9 @@
 pyarrowfs-adlgen2
 ==
 
+[![Downloads](https://static.pepy.tech/badge/pyarrowfs-adlgen2)](https://pepy.tech/project/pyarrowfs-adlgen2)
+[![Downloads](https://static.pepy.tech/badge/pyarrowfs-adlgen2/month)](https://pepy.tech/project/pyarrowfs-adlgen2)
+
 pyarrowfs-adlgen2 is an implementation of a pyarrow filesystem for Azure Data Lake Gen2.
 
 It allows you to use pyarrow and pandas to read parquet datasets directly from Azure without
@@ -9,6 +12,8 @@ the need to copy files to local storage first.
 Compared with [adlfs](https://github.com/fsspec/adlfs/), you may see better performance when reading datasets 
 with many files, as pyarrowfs-adlgen2 uses the  datalake gen2 sdk, which has fast directory listing, unlike
 the blob sdk used by adlfs.
+
+pyarrowfs-adlgen2 is stable software with a small API, and no major features are planned.
 
 Installation
 --
