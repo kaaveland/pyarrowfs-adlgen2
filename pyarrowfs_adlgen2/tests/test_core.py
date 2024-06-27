@@ -277,6 +277,14 @@ class TestAccountHandler:
         with account_handler.to_fs().open_output_stream('patest/t.pq', metadata=md) as o:
             o.write(b'anything')
 
+    def test_read_full_file_twice(self, account_handler):
+        account_handler.create_dir('fstest', recursive=False)
+        with account_handler.open_output_stream('fstest/data.txt') as o:
+            o.write(b"testdata")
+        with account_handler.to_fs().open_input_stream('fstest/data.txt') as fp:
+            assert fp.read() == b"testdata"
+            assert fp.read() == b""
+
 
 class TestLimitedAccessAccountHandler:
 
