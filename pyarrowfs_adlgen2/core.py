@@ -103,6 +103,7 @@ class DatalakeGen2File(io.IOBase):
         self.loc = 0
         self.buffer = io.BytesIO()
         self.offset = None
+        self._eof = False
 
         if mode not in {'ab', 'rb', 'wb'}:
             raise ValueError(f"File mode not supported: {mode}")
@@ -152,11 +153,12 @@ class DatalakeGen2File(io.IOBase):
             raise ValueError("Seek only available in read mode")
         if not 0 <= whence <= 2:
             raise ValueError(f'Invalid whence {whence}, should be 0, 1 or 2')
-        new_loc = [
-            loc,
-            self.loc + loc,
-            self.get_file_properties().size + loc
-        ][whence]
+        if whence == 0:
+            new_loc = loc
+        elif whence == 1:
+            new_loc = self.loc + loc
+        else:
+            new_loc = self.get_file_properties().size + loc
         if new_loc < 0:
             raise ValueError("Seek before start of file")
         self.loc = new_loc
@@ -200,12 +202,15 @@ class DatalakeGen2File(io.IOBase):
             raise ValueError("File not in read mode")
         if self.closed:
             raise ValueError('I/O on closed file')
-        if length < 0:
+        if length < 0 or length is None:
             length = self.get_file_properties().size - self.loc
-        if length == 0:
+        if length == 0 or self._eof:
             return b''
-
-        return self.download_file(self.loc, length).readall()
+        data = self.download_file(self.loc, length).readall()
+        if len(data) < length:
+            self._eof = True
+        self.loc += len(data)
+        return data
 
 
 class FilesystemHandler(pyarrow.fs.FileSystemHandler):
